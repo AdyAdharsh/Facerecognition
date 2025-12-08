@@ -1,6 +1,7 @@
 import streamlit as st
 import cv2  # OpenCV for image processing
 import numpy as np
+import av
 # NOTE: Use VideoProcessorBase as the primary class as VideoTransformerBase is deprecated
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode 
 
