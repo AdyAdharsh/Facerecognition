@@ -1,7 +1,7 @@
+import av
 import streamlit as st
 import cv2  # OpenCV for image processing
-import numpy as np
-import av # <--- REQUIRED: Must be in requirements.txt (pip install av)
+import numpy as np  # <--- REQUIRED: Must be in requirements.txt (pip install av)
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode 
 
 # --- PLACEHOLDER IMPORTS (Adjust as needed) ---
