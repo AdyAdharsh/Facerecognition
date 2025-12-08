@@ -1,15 +1,12 @@
 import streamlit as st
 import cv2  # OpenCV for image processing
 import numpy as np
-import av  # REQUIRED for VideoProcessorBase
+import av  # REQUIRED: Must be in requirements.txt (pip install av)
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode 
 
-# --- PLACEHOLDER IMPORTS (UNCOMMENT/ADJUST AS NEEDED) ---
-# NOTE: Make sure these core libraries are in your requirements.txt
-# import deepface 
-# from deepface import DeepFace # Example import if using deepface
-# from src.detect import detect_faces
-# from src.recognize import recognize_face
+# --- PLACEHOLDER IMPORTS (Adjust as needed) ---
+# NOTE: The logic here is temporarily simplified to test WebRTC stability.
+# The heavy imports (deepface, etc.) should be outside the cached function.
 
 # --- CONFIGURATION ---
 RECOGNITION_THRESHOLD = 0.6
@@ -19,10 +16,10 @@ FRAME_SKIP = 3
 # --- CRITICAL FIX 1: CACHE THE HEAVY MODELS SEPARATELY ---
 @st.cache_resource
 def load_deepface_models():
-    """Loads all heavy models (DeepFace, etc.) only once, safely outside the thread."""
-    # NOTE: Replace 'return "Loaded Models"' with your actual model loading logic
-    # Example: return DeepFace.build_model("VGG-Face")
-    return "Loaded Models" 
+    """Loads all heavy models only once, safely outside the thread."""
+    # NOTE: Keep your actual heavy model loading logic here (e.g., DeepFace.build_model)
+    # This function is retained to verify if the issue is in the loading itself.
+    return "LOADED_MODELS_PLACEHOLDER" 
 
 
 # --- CRITICAL FIX 2: CACHE THE FACTORY ---
@@ -33,24 +30,20 @@ def get_face_processor_factory():
     class FaceRecognitionProcessor(VideoProcessorBase):
         """Processes video frames using the standard VideoProcessorBase."""
         def __init__(self):
-            # Load models from the cached function, reducing memory strain on thread start
-            self.models = load_deepface_models() 
+            # We call the model loading function, but we won't use the result in recv
+            # This tests if the memory consumption is the issue.
+            self.models_placeholder = load_deepface_models() 
             self.frame_count = 0
             
         def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+            # --- SIMPLIFIED PROCESSING LOGIC (TEMPORARY DEBUGGING) ---
+            
             # Convert frame from av.VideoFrame to numpy array (BGR)
             img = frame.to_ndarray(format="bgr24")
             
-            self.frame_count += 1
-            if self.frame_count % FRAME_SKIP != 0:
-                return frame # Return the original frame if skipping
-            
-            # --- Your Face Detection and Recognition Logic Goes Here ---
+            # Simple, lightweight OpenCV draw operation for verification
             h, w, _ = img.shape
-            
-            # Placeholder drawing logic:
-            x, y, w_box, h_box = w//4, h//4, w//2, h//2 
-            cv2.rectangle(img, (x, y), (x + w_box, y + h_box), (0, 0, 255), 2)
+            cv2.putText(img, "WebRTC OK", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
             
             # Convert back to av.VideoFrame before returning
             return av.VideoFrame.from_ndarray(img, format="bgr24")
@@ -88,7 +81,7 @@ def main():
     )
 
     st.markdown("---")
-    # ... (rest of main)
+    st.subheader("Access Log (Placeholder)")
 
 # --- EXECUTION ---
 if __name__ == "__main__":
