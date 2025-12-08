@@ -5,7 +5,10 @@ from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, 
 
 # NOTE: Make sure these core libraries are in your requirements.txt
 # import deepface 
-# import sklearn # if needed for recognition/clustering
+# import importlib.util 
+# if importlib.util.find_spec('deepface'):
+#     from deepface import DeepFace 
+
 
 # --- PLACEHOLDER IMPORTS (UNCOMMENT/ADJUST AS NEEDED) ---
 # from src.detect import detect_faces
@@ -27,7 +30,7 @@ class FaceRecognitionTransformer(VideoTransformerBase):
     """
     def __init__(self):
         # Initialize any models/trackers here to load them once
-        # Example: self.detector = deepface.DeepFace.build_model("mtcnn")
+        # Example: self.detector = DeepFace.build_model("mtcnn")
         # Example: self.recognizer = load_your_recognizer_model()
         self.frame_count = 0
         self.detection_model = None # Placeholder
@@ -97,7 +100,7 @@ def main():
 
     # --- CRITICAL FIX: Session State Wrapper ---
     # Only initialize the streamer if it's not already in the session state.
-    # This prevents the thread initialization crash on re-runs.
+    # This prevents the thread initialization crash (AttributeError) on re-runs.
     if STREAMER_KEY not in st.session_state:
         st.session_state[STREAMER_KEY] = webrtc_streamer(
             key=STREAMER_KEY,  # Use the stable key here
