@@ -1,0 +1,6 @@
+streamlit
+streamlit-webrtc
+opencv-python
+deepface
+numpy
+scikit-learn
