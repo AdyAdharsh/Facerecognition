@@ -3,16 +3,11 @@ import cv2  # OpenCV for image processing
 import numpy as np
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, VideoProcessorBase
 
+# --- PLACEHOLDER IMPORTS (UNCOMMENT/ADJUST AS NEEDED) ---
 # NOTE: Make sure these core libraries are in your requirements.txt
 # import deepface 
-# import importlib.util 
-# if importlib.util.find_spec('deepface'):
-#     from deepface import DeepFace 
-
-
-# --- PLACEHOLDER IMPORTS (UNCOMMENT/ADJUST AS NEEDED) ---
+# from deepface import DeepFace # Example import if using deepface
 # from src.detect import detect_faces
-# from src.embed import get_embeddings
 # from src.recognize import recognize_face
 # from src.utils import LogManager 
 
@@ -30,8 +25,8 @@ class FaceRecognitionTransformer(VideoTransformerBase):
     """
     def __init__(self):
         # Initialize any models/trackers here to load them once
+        # This only runs once per Streamlit session or on initialization.
         # Example: self.detector = DeepFace.build_model("mtcnn")
-        # Example: self.recognizer = load_your_recognizer_model()
         self.frame_count = 0
         self.detection_model = None # Placeholder
         self.recognition_model = None # Placeholder
@@ -51,11 +46,9 @@ class FaceRecognitionTransformer(VideoTransformerBase):
         img = frame.copy()
         
         # 1. Detect Faces (Placeholder Logic)
-        # Placeholder: Assume one face in the middle for demonstration
-        # In a real app, you'd get (x, y, w, h) for all faces
         h, w, _ = img.shape
         # Example: faces = detect_faces(img, self.detection_model)
-        faces = [(w//4, h//4, w//2, h//2)] 
+        faces = [(w//4, h//4, w//2, h//2)] # Placeholder bounding box
 
         for (x, y, w, h) in faces:
             # 2. Recognize Face (Placeholder Logic)
@@ -64,7 +57,6 @@ class FaceRecognitionTransformer(VideoTransformerBase):
             score = 0.0
             
             # --- Decision and Visualization ---
-            
             if recognized_name != "Unknown" and score >= RECOGNITION_THRESHOLD:
                 color = (0, 255, 0) # Green for known user
                 # self.log_manager.log_access(recognized_name)
@@ -95,28 +87,24 @@ def main():
         "Recognition Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05
     )
 
-    # Use a stable key for the streamer
-    STREAMER_KEY = "face-recognition-stream-stable" 
-
-    # --- CRITICAL FIX: Session State Wrapper ---
-    # Only initialize the streamer if it's not already in the session state.
-    # This prevents the thread initialization crash (AttributeError) on re-runs.
-    if STREAMER_KEY not in st.session_state:
-        st.session_state[STREAMER_KEY] = webrtc_streamer(
-            key=STREAMER_KEY,  # Use the stable key here
-            # Use SENDRECV mode for two-way communication (video in, video out)
-            mode=WebRtcMode.SENDRECV,
-            
-            # --- CRITICAL FIX: Enhanced STUN/TURN configuration to fix aioice errors ---
-            rtc_configuration={
-                "iceServers": [
-                    {"urls": ["stun:stun.l.google.com:19302"]},
-                    {"urls": ["stun:stun.services.mozilla.com"]}
-                ]
-            },
-            video_transformer_factory=FaceRecognitionTransformer,
-            async_transform=True
-        )
+    # --- RESTORE AND FIX THE WEBRTC STREAMER CALL ---
+    # NOTE: The removal of the 'if st.session_state' wrapper is crucial to render the component.
+    webrtc_streamer(
+        key="face-recognition-stream",  # Use a simple key for identification
+        mode=WebRtcMode.SENDRECV,
+        
+        # --- CRITICAL FIX: Enhanced STUN/TURN configuration to stabilize cloud connection ---
+        rtc_configuration={
+            "iceServers": [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {"urls": ["stun:stun.services.mozilla.com"]}
+            ]
+        },
+        
+        # --- FIX DEPRECATED ARGUMENTS (Use video_processor_factory and async_processing) ---
+        video_processor_factory=FaceRecognitionTransformer,  # Fixes DeprecationWarning
+        async_processing=True                                # Fixes DeprecationWarning
+    )
 
     st.markdown("---")
     st.subheader("Access Log (Placeholder)")
