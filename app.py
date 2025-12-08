@@ -1,8 +1,8 @@
 import streamlit as st
 import cv2  # OpenCV for image processing
 import numpy as np
-import time
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, VideoProcessorBase
+
 # NOTE: Make sure these core libraries are in your requirements.txt
 # import deepface 
 # import sklearn # if needed for recognition/clustering
@@ -21,7 +21,6 @@ FRAME_SKIP = 3  # Process every 3rd frame for performance
 
 
 # --- VIDEO PROCESSING CLASS ---
-# VideoTransformerBase handles receiving frames and sending them back
 class FaceRecognitionTransformer(VideoTransformerBase):
     """
     A class that processes video frames in real-time for face recognition.
@@ -49,12 +48,10 @@ class FaceRecognitionTransformer(VideoTransformerBase):
         img = frame.copy()
         
         # 1. Detect Faces (Placeholder Logic)
-        # Replace with your actual detection function call
-        # Example: faces = detect_faces(img, self.detection_model)
-        
         # Placeholder: Assume one face in the middle for demonstration
         # In a real app, you'd get (x, y, w, h) for all faces
         h, w, _ = img.shape
+        # Example: faces = detect_faces(img, self.detection_model)
         faces = [(w//4, h//4, w//2, h//2)] 
 
         for (x, y, w, h) in faces:
@@ -95,24 +92,28 @@ def main():
         "Recognition Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05
     )
 
-    # Start the WebRTC Streamer
-    webrtc_streamer(
-        key="face-recognition-stream",
-        # Use SENDRECV mode for two-way communication (video in, video out)
-        mode=WebRtcMode.SENDRECV,
-        
-        # --- CRITICAL FIX: Enhanced STUN/TURN configuration to fix aioice errors ---
-        rtc_configuration={
-            "iceServers": [
-                # Google's public STUN server (standard)
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                # Mozilla's public STUN server (as backup)
-                {"urls": ["stun:stun.services.mozilla.com"]}
-            ]
-        },
-        video_transformer_factory=FaceRecognitionTransformer,
-        async_transform=True
-    )
+    # Use a stable key for the streamer
+    STREAMER_KEY = "face-recognition-stream-stable" 
+
+    # --- CRITICAL FIX: Session State Wrapper ---
+    # Only initialize the streamer if it's not already in the session state.
+    # This prevents the thread initialization crash on re-runs.
+    if STREAMER_KEY not in st.session_state:
+        st.session_state[STREAMER_KEY] = webrtc_streamer(
+            key=STREAMER_KEY,  # Use the stable key here
+            # Use SENDRECV mode for two-way communication (video in, video out)
+            mode=WebRtcMode.SENDRECV,
+            
+            # --- CRITICAL FIX: Enhanced STUN/TURN configuration to fix aioice errors ---
+            rtc_configuration={
+                "iceServers": [
+                    {"urls": ["stun:stun.l.google.com:19302"]},
+                    {"urls": ["stun:stun.services.mozilla.com"]}
+                ]
+            },
+            video_transformer_factory=FaceRecognitionTransformer,
+            async_transform=True
+        )
 
     st.markdown("---")
     st.subheader("Access Log (Placeholder)")
