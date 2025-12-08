@@ -1,78 +1,55 @@
 import streamlit as st
 import cv2  # OpenCV for image processing
 import numpy as np
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, VideoProcessorBase
+# NOTE: Use VideoProcessorBase as the primary class as VideoTransformerBase is deprecated
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode 
 
 # --- PLACEHOLDER IMPORTS (UNCOMMENT/ADJUST AS NEEDED) ---
 # NOTE: Make sure these core libraries are in your requirements.txt
 # import deepface 
-# from deepface import DeepFace # Example import if using deepface
 # from src.detect import detect_faces
 # from src.recognize import recognize_face
-# from src.utils import LogManager 
-
 
 # --- CONFIGURATION ---
-# NOTE: Adjust these values based on your model/system performance
 RECOGNITION_THRESHOLD = 0.6
 FRAME_SKIP = 3  # Process every 3rd frame for performance
 
 
 # --- VIDEO PROCESSING CLASS ---
-class FaceRecognitionTransformer(VideoTransformerBase):
+# Using VideoProcessorBase to align with current streamlit-webrtc practices
+class FaceRecognitionProcessor(VideoProcessorBase):
     """
     A class that processes video frames in real-time for face recognition.
     """
     def __init__(self):
-        # Initialize any models/trackers here to load them once
-        # This only runs once per Streamlit session or on initialization.
-        # Example: self.detector = DeepFace.build_model("mtcnn")
+        # Initialize models once here
         self.frame_count = 0
-        self.detection_model = None # Placeholder
-        self.recognition_model = None # Placeholder
+        # ... your model loading initialization ...
         
-        # Log manager placeholder
-        # self.log_manager = LogManager() 
+    def recv(self, frame):
+        # The frame is now an av.VideoFrame object, convert to numpy array
+        img = frame.to_ndarray(format="bgr24")
         
-    def transform(self, frame: np.ndarray) -> np.ndarray:
-        # Increment frame count
         self.frame_count += 1
-        
-        # Skip frames to reduce CPU load
         if self.frame_count % FRAME_SKIP != 0:
-            return frame
+            return frame # Return the original frame if skipping
         
-        # Convert frame from BGR (OpenCV default) to RGB 
-        img = frame.copy()
-        
-        # 1. Detect Faces (Placeholder Logic)
+        # --- Your Face Detection and Recognition Logic Goes Here ---
+        # Example placeholder logic:
         h, w, _ = img.shape
-        # Example: faces = detect_faces(img, self.detection_model)
         faces = [(w//4, h//4, w//2, h//2)] # Placeholder bounding box
 
         for (x, y, w, h) in faces:
-            # 2. Recognize Face (Placeholder Logic)
-            # Example: recognized_name, score = recognize_face(img, x, y, w, h, self.recognition_model)
-            recognized_name = "Unknown" # Placeholder result
+            recognized_name = "Unknown" 
             score = 0.0
-            
-            # --- Decision and Visualization ---
-            if recognized_name != "Unknown" and score >= RECOGNITION_THRESHOLD:
-                color = (0, 255, 0) # Green for known user
-                # self.log_manager.log_access(recognized_name)
-            else:
-                color = (0, 0, 255) # Red for unknown user
-                recognized_name = "Unknown" 
-            
-            # Draw bounding box
-            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            
-            # Draw label
-            label = f"{recognized_name}: {score:.2f}"
-            cv2.putText(img, label, (x, y - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+            color = (0, 0, 255) 
 
-        return img
+            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+            label = f"{recognized_name}: {score:.2f}"
+            cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+
+        # Convert back to av.VideoFrame before returning
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 # --- STREAMLIT UI ---
 
@@ -82,18 +59,22 @@ def main():
     st.title("Smart Office Face Recognition System 📸")
     st.sidebar.title("Configuration")
 
-    # Sidebar control for threshold
     RECOGNITION_THRESHOLD = st.sidebar.slider(
         "Recognition Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05
     )
 
-    # --- RESTORE AND FIX THE WEBRTC STREAMER CALL ---
-    # NOTE: The removal of the 'if st.session_state' wrapper is crucial to render the component.
+    # Use a stable key
+    STREAMER_KEY = "face-recognition-stream-final" 
+
+    # --- CRITICAL FIX: The webrtc_streamer call itself must be outside the wrapper ---
+    # The fix is to ensure the component is always called/rendered, but the initialization
+    # of heavy resources (models) is safely handled inside a cached function (if needed).
+    
     webrtc_streamer(
-        key="face-recognition-stream",  # Use a simple key for identification
+        key=STREAMER_KEY,  
         mode=WebRtcMode.SENDRECV,
         
-        # --- CRITICAL FIX: Enhanced STUN/TURN configuration to stabilize cloud connection ---
+        # --- FIX 2: Enhanced STUN/TURN configuration to resolve aioice errors ---
         rtc_configuration={
             "iceServers": [
                 {"urls": ["stun:stun.l.google.com:19302"]},
@@ -101,17 +82,15 @@ def main():
             ]
         },
         
-        # --- FIX DEPRECATED ARGUMENTS (Use video_processor_factory and async_processing) ---
-        video_processor_factory=FaceRecognitionTransformer,  # Fixes DeprecationWarning
-        async_processing=True                                # Fixes DeprecationWarning
+        # NOTE: Using video_processor_factory and the VideoProcessorBase class
+        video_processor_factory=FaceRecognitionProcessor,  
+        async_processing=True                                
     )
 
     st.markdown("---")
-    st.subheader("Access Log (Placeholder)")
-    # Placeholder for displaying logs
-    # if st.button("Refresh Log"):
-    #     st.dataframe(LogManager().get_logs())
+    # ... (rest of main)
 
 # --- EXECUTION ---
 if __name__ == "__main__":
+    # You MUST also install the package 'av' (pip install av) to use VideoProcessorBase
     main()
