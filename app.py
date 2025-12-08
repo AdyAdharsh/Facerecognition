@@ -1,151 +1,93 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import cv2
+import cv2  # Essential for processing video frames
 import numpy as np
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
 
-# --- Import your modular code ---
-from src.utils import load_embeddings, save_embeddings
-from src.detect import detect_face
-from src.embed import get_embedding
-from src.recognize import recognize_face_by_embedding
-from src.register import register_new_user # Ensure this is in your src folder
+# --- [PLACEHOLDER IMPORTS FOR YOUR PROJECT STRUCTURE] ---
+# NOTE: Replace these with your actual imports if using src/ files
+# from src.detect import detect_faces
+# from src.recognize import recognize_face
+# from src.log import LogManager
 
-# Use Streamlit's cache to load the persistent data once
-@st.cache_resource
-def load_registered_data():
-    """Load the persistent data structure."""
-    return load_embeddings()
+# --- CONFIGURATION (Move to a separate config file if complex) ---
+# Assuming you have a list of known users for recognition
+KNOWN_USERS = ["Adharsh", "Jane Doe", "Guest"] 
+FRAME_SKIP = 5 # Process every 5th frame for performance
 
-# Global variables for capturing a registration frame
-REGISTRATION_FRAME = None
-# Initialize frame_lock in session state if it doesn't exist
-if 'frame_lock' not in st.session_state:
-    st.session_state['frame_lock'] = False
-FRAME_LOCK = st.session_state['frame_lock']
+# --- VIDEO PROCESSING CLASS ---
 
+# VideoTransformerBase handles receiving frames and sending them back
 class FaceRecognitionTransformer(VideoTransformerBase):
-    def __init__(self, data_store, detector_key, mode):
-        self.data_store = data_store
-        self.detector_key = detector_key
-        self.mode = mode
+    """
+    A class that processes video frames in real-time for face recognition.
+    """
+    def __init__(self, recognition_threshold=0.6):
+        # Initialize any models or trackers here
+        # Example: self.model = load_recognition_model() 
+        self.recognition_threshold = recognition_threshold
+        # Placeholder for face detection/recognition models
+        self.detector = None 
+        self.recognizer = None
+
+    def transform(self, frame: np.ndarray) -> np.ndarray:
+        # Convert the frame from BGR (OpenCV default) to RGB 
+        img = frame.copy()
         
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr")
+        # 1. Detect Faces
+        # This function should return bounding boxes and confidence scores
+        # Example: faces = detect_faces(img)
+        faces = [] # Placeholder for detected faces (x, y, w, h)
 
-        # 1. Detection
-        detected_faces = detect_face(img, detector_type=self.detector_key)
-        
-        if detected_faces:
-            # We focus on the largest face for simplicity
-            main_face = max(detected_faces, key=lambda x: x['box'][2] * x['box'][3])
-            x, y, w, h = main_face['box']
-            
-            # Crop the face for processing (Alignment & Cropping) 
-            face_img = img[y:y+h, x:x+w] 
-            
-            # 2. Draw bounding box and label
-            label = "Processing..."
-            color = (255, 255, 0) # Yellow/Cyan
-            
-            if self.mode == "Recognition":
-                # 3. Recognition Logic
-                
-                # Embedding extraction
-                embedding = get_embedding(face_img)
+        for (x, y, w, h) in faces:
+            # 2. Recognize Face
+            # recognized_name = recognize_face(img, x, y, w, h, self.recognizer)
+            recognized_name = "Unknown" # Placeholder result
 
-                # Comparison Logic
-                name, distance = recognize_face_by_embedding(
-                    embedding, 
-                    self.data_store['embeddings'], 
-                    self.data_store['names']
-                )
-
-                label = f"{name} (Dist: {distance:.2f})"
-                if name != "Unknown":
-                    color = (0, 255, 0) # Green for known
-                else:
-                    color = (0, 0, 255) # Red for unknown
+            # 3. Log/Display Result
+            if recognized_name != "Unknown":
+                color = (0, 255, 0) # Green for known user
+                # LogManager.log_access(recognized_name)
+            else:
+                color = (0, 0, 255) # Red for unknown user
             
-            elif self.mode == "Registration":
-                # 3. Registration capture mode
-                label = "Ready to Register"
-                color = (0, 255, 255) # Yellow
-                
-                # Capture the frame for registration if the lock is not set
-                global REGISTRATION_FRAME
-                if not st.session_state['frame_lock']:
-                    REGISTRATION_FRAME = face_img
-            
-            # Draw the box and text
+            # Draw bounding box
             cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            
+            # Draw label
+            cv2.putText(img, recognized_name, (x, y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
         return img
 
-# --- Streamlit UI ---
+# --- STREAMLIT UI ---
 
-st.set_page_config(page_title="Smart Office Face Recognition", layout="wide")
-# Removed erroneous tag
-st.title("👨‍💼 Smart Office Access System")
-st.markdown("This system identifies staff members using a webcam, welcomes them, or registers new visitors.")
+def main():
+    st.title("Smart Office Face Recognition System 📸")
+    st.sidebar.title("Configuration")
 
-st.sidebar.title("System Controls")
-mode = st.sidebar.radio("Select Mode", ["Recognition", "Registration"])
-detector_type = st.sidebar.radio(
-    "Select Detector (Bonus Feature)", 
-    ["CNN-based (Default)", "Classical (Haar Cascade)"]
-)
-detector_key = 'cnn' if detector_type == 'CNN-based (Default)' else 'classical'
-
-# Load the persistent data
-data_store = load_registered_data()
-
-if mode == "Registration":
-    st.header("📝 New User Registration")
-    st.info("Press 'Start' to activate the camera. When ready and a face is detected, enter the staff name and press 'Capture & Register'.")
-    
-    user_name = st.text_input("Enter Staff Name", key='reg_name')
-    
-    # ------------------ Registration Stream ------------------
-    webrtc_ctx_reg = webrtc_streamer(
-        key="registration_stream",
-        video_transformer_factory=lambda: FaceRecognitionTransformer(data_store, detector_key, mode),
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"video": True, "audio": False},
-        async_transform=True,
+    # Sidebar controls (optional)
+    recognition_threshold = st.sidebar.slider(
+        "Recognition Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05
     )
-    
-    if st.button("Capture & Register") and webrtc_ctx_reg.state.playing:
-        if not user_name:
-            st.error("Please enter a name for registration.")
-        elif REGISTRATION_FRAME is None:
-            st.error("No face detected in the frame. Please look at the camera.")
-        else:
-            # Set lock to prevent transformer from overwriting REGISTRATION_FRAME
-            st.session_state['frame_lock'] = True 
-            
-            with st.spinner(f"Registering {user_name} with {detector_type} detector..."):
-                if register_new_user(REGISTRATION_FRAME, user_name):
-                    st.success(f"Registration successful for **{user_name}**! Embedding stored to {{data/embeddings.pkl}}")
-                    # Force reload the data store to include the new user
-                    load_registered_data.clear() 
-                    st.session_state['frame_lock'] = False
-                else:
-                    st.error("Registration failed. Could not generate embedding.")
 
-elif mode == "Recognition":
-    st.header("🔑 Real-time Recognition Check")
-    st.write(f"Currently **{len(data_store['embeddings'])}** users are registered.")
-
-    # ------------------ Recognition Stream ------------------
-    webrtc_ctx_rec = webrtc_streamer(
-        key="recognition_stream",
-        video_transformer_factory=lambda: FaceRecognitionTransformer(data_store, detector_key, mode),
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"video": True, "audio": False},
-        async_transform=True,
+    # Start the WebRTC Streamer
+    # NOTE: Set WebRtcMode.SENDONLY if you only need the camera feed
+    webrtc_streamer(
+        key="face-recognition-stream",
+        mode=WebRtcMode.SENDRECV,
+        rtc_configuration={
+            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        },
+        video_transformer_factory=lambda: FaceRecognitionTransformer(recognition_threshold),
+        async_transform=True
     )
-    
-    # ✅ FIX: IndentationError is fixed here by indenting the st.success line.
-    if webrtc_ctx_rec.state.playing:
-        st.success(f"Recognition running with **{detector_type}** detector...")
+
+    st.markdown("---")
+    st.subheader("Access Log (Placeholder)")
+    # Placeholder for displaying logs
+    # if st.button("Refresh Log"):
+    #    st.dataframe(LogManager.get_logs())
+
+# --- EXECUTION ---
+if __name__ == "__main__":
+    main()
