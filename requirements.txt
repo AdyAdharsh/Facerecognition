@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Essential Dependencies
 numpy==1.26.4
 av==11.0.0
@@ -10,3 +11,8 @@ streamlit-webrtc==0.32.0
 # Computer Vision & Deep Learning (Stable Versions)
 opencv-python==4.8.1.78
 deepface==0.0.91
+=======
+altair
+pandas
+streamlit
+>>>>>>> eae8bd2157243843e1757f9b3efd63bc5dc50d8d
