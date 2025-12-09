@@ -1,6 +1,6 @@
 av
 streamlit
-streamlit-webrtc
+streamlit-webrtc==0.32.0
 opencv-python
 deepface
 numpy
