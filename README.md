@@ -1,14 +1,15 @@
 ---
-title: Streamlit Template Space
+title: Face Recognition Deepface
 emoji: 🚀
 colorFrom: red
 colorTo: red
 sdk: docker
 app_port: 8501
 tags:
-  - streamlit
+- streamlit
 pinned: false
-short_description: Streamlit template space
+short_description: Face recognition demo using Streamlit and DeepFace
+license: mit
 ---
 
 # Welcome to Streamlit!
