@@ -1,8 +1,21 @@
+# CRITICAL: Compilation tools
+build-essential
+pkg-config
+
+# FFMPEG and Video/Audio Headers (REQUIRED for 'av' to build)
+ffmpeg
+libavcodec-dev
+libavformat-dev
+libavdevice-dev
+libavutil-dev
+libswscale-dev
+libswresample-dev
+
+# Headers for OpenCV and scientific libs (RECOMMENDED)
 libgl1
 libglib2.0-0
 libsm6
 libxext6
 libxrender1
+libatlas-base-dev
 gfortran
-libopenblas-dev
-pkg-config
