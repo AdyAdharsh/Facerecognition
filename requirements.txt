@@ -1,12 +1,12 @@
-# System/Platform Dependencies
-av==11.0.0
+# Essential Dependencies
 numpy==1.26.4
+av==11.0.0
 scikit-learn==1.3.2
 
-# Streamlit Core
+# Streamlit Core & WebRTC (Compatible Pair)
 streamlit==1.28.0
+streamlit-webrtc==0.32.0
 
-# WebRTC and CV/ML Libraries
-streamlit-webrtc==0.32.0 
+# Computer Vision & Deep Learning (Stable Versions)
 opencv-python==4.8.1.78
 deepface==0.0.91
