@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Register Face</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 0.3rem;
+      font-size: 2rem;
+    }
+    a {
+      color: #7aa2ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    #info {
+      margin-bottom: 1rem;
+      opacity: 0.8;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    #video-container {
+      position: relative;
+      width: 640px;
+      max-width: 100%;
+      aspect-ratio: 4/3;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 2px solid #2e3b7b;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+      background: #000;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #controls {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    input[type="text"] {
+      padding: 0.4rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid #283578;
+      background: #0f1530;
+      color: #f5f5f5;
+      min-width: 200px;
+    }
+    button {
+      padding: 0.45rem 1.1rem;
+      border-radius: 999px;
+      border: 0;
+      background: #3b82f6;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+    #status {
+      margin-top: 1rem;
+      padding: 0.6rem 1rem;
+      border-radius: 999px;
+      background: #141a33;
+      border: 1px solid #283578;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    #status span.label {
+      font-weight: 600;
+      color: #7aa2ff;
+    }
+    #hidden-canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Register a New Face</h1>
+
+  <div id="info">
+    <div>Enter a name, then click "Capture & Register" to store your face embedding.</div>
+    <div>Registered users: {{ num_users }} &middot; <a href="/">Back to recognition</a></div>
+  </div>
+
+  <div id="video-container">
+    <video id="video" autoplay playsinline></video>
+  </div>
+
+  <canvas id="hidden-canvas"></canvas>
+
+  <div id="controls">
+    <input id="name-input" type="text" placeholder="Enter name (e.g., Adharsh)" />
+    <button id="register-btn">Capture &amp; Register</button>
+  </div>
+
+  <div id="status">
+    <span class="label">Status:</span>
+    <span id="status-text">Initializing camera...</span>
+  </div>
+
+  <script>
+    const video = document.getElementById("video");
+    const hiddenCanvas = document.getElementById("hidden-canvas");
+    const statusText = document.getElementById("status-text");
+    const nameInput = document.getElementById("name-input");
+    const registerBtn = document.getElementById("register-btn");
+
+    async function setupCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusText.textContent =
+          "Your browser / URL doesn't allow webcam. Use Chrome on http://localhost:8080 or HTTPS.";
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+
+        video.onloadedmetadata = () => {
+          video.play();
+          hiddenCanvas.width = video.videoWidth;
+          hiddenCanvas.height = video.videoHeight;
+          statusText.textContent = "Camera ready. Enter a name and click Register.";
+        };
+
+      } catch (err) {
+        console.error("Error accessing webcam:", err);
+        statusText.textContent =
+          "Cannot access your webcam. Please allow camera permission.";
+      }
+    }
+
+    async function captureAndRegister() {
+      const name = nameInput.value.trim();
+      if (!name) {
+        statusText.textContent = "Please enter a name before registering.";
+        return;
+      }
+
+      const ctx = hiddenCanvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+
+      hiddenCanvas.toBlob(async (blob) => {
+        if (!blob) {
+          statusText.textContent = "Failed to capture frame. Try again.";
+          return;
+        }
+
+        registerBtn.disabled = true;
+        statusText.textContent = "Registering...";
+
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("frame", blob, "frame.jpg");
+
+        try {
+          const res = await fetch("/api/register_frame", {
+            method: "POST",
+            body: formData
+          });
+          const data = await res.json();
+
+          if (!data.success) {
+            statusText.textContent = data.error || "Registration failed.";
+          } else {
+            statusText.textContent = data.message || "Registration successful!";
+          }
+
+        } catch (err) {
+          console.error("Error registering:", err);
+          statusText.textContent = "Error talking to the server.";
+
+        } finally {
+          registerBtn.disabled = false;
+        }
+      }, "image/jpeg", 0.9);
+    }
+
+    registerBtn.addEventListener("click", captureAndRegister);
+    setupCamera();
+  </script>
+</body>
+</html>
