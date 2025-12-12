@@ -21,7 +21,7 @@ def register_new_user(face_image, name):
         data['embeddings'].append(embedding)
         data['names'].append(name)
         
-        # Persist data to {data/embeddings.pkl} [cite: 38]
+        # Persist data to {data/embeddings.pkl}
         return save_embeddings(data)
     
-    return False                                                
+    return False

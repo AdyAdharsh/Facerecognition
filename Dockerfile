@@ -1,20 +1,27 @@
-FROM python:3.13.5-slim
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=linux/amd64 python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential pkg-config \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+        liblapack-dev libblas-dev gfortran \
+        ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
 
-COPY requirements.txt ./
-COPY src/ ./src/
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
-RUN pip3 install -r requirements.txt
+RUN mkdir -p /app/data /root/.deepface/weights
 
-EXPOSE 8501
+COPY . /app
 
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+ENV PORT=8080
 
-ENTRYPOINT ["streamlit", "run", "src/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8080} app:app --workers 2 --threads 8 --timeout 120"]

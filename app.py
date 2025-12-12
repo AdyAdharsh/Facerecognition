@@ -1,89 +1,162 @@
-import streamlit as st
-import cv2  # OpenCV for image processing
+import os
+
+# --- Environment Configuration ---
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"          # Force CPU
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+# ---------------------------------
+
+import cv2
 import numpy as np
-import av  # REQUIRED: Must be in requirements.txt (pip install av)
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode 
+from flask import Flask, render_template, request, jsonify
 
-# --- PLACEHOLDER IMPORTS (Adjust as needed) ---
-# NOTE: The logic here is temporarily simplified to test WebRTC stability.
-# The heavy imports (deepface, etc.) should be outside the cached function.
+from src.utils import load_embeddings
+from src.detect import detect_face
+from src.embed import get_embedding
+from src.recognize import recognize_face_by_embedding
+from src.register import register_new_user
 
-# --- CONFIGURATION ---
-RECOGNITION_THRESHOLD = 0.6
-FRAME_SKIP = 3
-
-
-# --- CRITICAL FIX 1: CACHE THE HEAVY MODELS SEPARATELY ---
-@st.cache_resource
-def load_deepface_models():
-    """Loads all heavy models only once, safely outside the thread."""
-    # NOTE: Keep your actual heavy model loading logic here (e.g., DeepFace.build_model)
-    # This function is retained to verify if the issue is in the loading itself.
-    return "LOADED_MODELS_PLACEHOLDER" 
+app = Flask(__name__)
+app.secret_key = "your_super_secret_key_here"
 
 
-# --- CRITICAL FIX 2: CACHE THE FACTORY ---
-@st.cache_resource
-def get_face_processor_factory():
-    """Returns the processor class, ensuring its initialization is thread-safe."""
-    
-    class FaceRecognitionProcessor(VideoProcessorBase):
-        """Processes video frames using the standard VideoProcessorBase."""
-        def __init__(self):
-            # We call the model loading function, but we won't use the result in recv
-            # This tests if the memory consumption is the issue.
-            self.models_placeholder = load_deepface_models() 
-            self.frame_count = 0
-            
-        def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-            # --- SIMPLIFIED PROCESSING LOGIC (TEMPORARY DEBUGGING) ---
-            
-            # Convert frame from av.VideoFrame to numpy array (BGR)
-            img = frame.to_ndarray(format="bgr24")
-            
-            # Simple, lightweight OpenCV draw operation for verification
-            h, w, _ = img.shape
-            cv2.putText(img, "WebRTC OK", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
-            
-            # Convert back to av.VideoFrame before returning
-            return av.VideoFrame.from_ndarray(img, format="bgr24")
+# ------------------------
+# Routes (Pages)
+# ------------------------
 
-    return FaceRecognitionProcessor
+@app.route("/")
+def index():
+    """Main recognition UI page."""
+    data = load_embeddings()
+    num_users = len(data["names"])
+    return render_template("index.html", num_users=num_users)
 
-# --- STREAMLIT UI ---
 
-def main():
-    global RECOGNITION_THRESHOLD
-    
-    st.title("Smart Office Face Recognition System 📸")
-    st.sidebar.title("Configuration")
+@app.route("/register")
+def register_page():
+    """Registration page UI."""
+    data = load_embeddings()
+    num_users = len(data["names"])
+    return render_template("register.html", num_users=num_users)
 
-    RECOGNITION_THRESHOLD = st.sidebar.slider(
-        "Recognition Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05
-    )
 
-    # --- FINAL WEBRTC STREAMER CALL ---
-    webrtc_streamer(
-        key="face-recognition-stream-final-cache",  
-        mode=WebRtcMode.SENDRECV,
-        
-        # --- Enhanced STUN/TURN configuration to stabilize cloud connection ---
-        rtc_configuration={
-            "iceServers": [
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                {"urls": ["stun:stun.services.mozilla.com"]}
-            ]
-        },
-        
-        # Use the CACHED factory function
-        video_processor_factory=get_face_processor_factory,  
-        async_processing=True                                
-    )
+# ------------------------
+# API: Frame Recognition
+# ------------------------
 
-    st.markdown("---")
-    st.subheader("Access Log (Placeholder)")
+@app.route("/api/recognize_frame", methods=["POST"])
+def recognize_frame():
+    """Processes webcam frame and returns recognition match."""
+    if "frame" not in request.files:
+        return jsonify({"success": False, "error": "No frame uploaded"}), 400
 
-# --- EXECUTION ---
+    file_bytes = np.frombuffer(request.files["frame"].read(), np.uint8)
+    frame_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    if frame_bgr is None:
+        return jsonify({"success": False, "error": "Failed to decode image"}), 400
+
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+
+    detected_faces = detect_face(frame_rgb, detector_type="retinaface")
+    if not detected_faces:
+        return jsonify({"success": True, "found": False, "message": "No face detected"})
+
+    # Pick the largest detected face
+    main_face = max(detected_faces, key=lambda x: x["box"][2] * x["box"][3])
+    x, y, w, h = main_face["box"]
+
+    h_img, w_img = frame_bgr.shape[:2]
+    x = max(0, x); y = max(0, y)
+    w = max(1, min(w, w_img - x))
+    h = max(1, min(h, h_img - y))
+
+    face_img = frame_bgr[y:y+h, x:x+w]
+
+    embedding = get_embedding(face_img)
+    if embedding is None:
+        return jsonify({
+            "success": True,
+            "found": False,
+            "message": "Face detected but embedding failed",
+            "box": [x, y, w, h]
+        })
+
+    data = load_embeddings()
+    known_embeddings = data["embeddings"]
+    known_names = data["names"]
+
+    if not known_embeddings:
+        return jsonify({
+            "success": True,
+            "found": False,
+            "message": "No registered users yet",
+            "box": [x, y, w, h]
+        })
+
+    name, distance = recognize_face_by_embedding(embedding, known_embeddings, known_names)
+
+    return jsonify({
+        "success": True,
+        "found": True,
+        "name": name,
+        "distance": float(distance),
+        "box": [x, y, w, h]
+    })
+
+
+# ------------------------
+# API: Register New Face
+# ------------------------
+
+@app.route("/api/register_frame", methods=["POST"])
+def register_frame():
+    """Registers a new user from webcam frame."""
+    name = request.form.get("name", "").strip()
+    if not name:
+        return jsonify({"success": False, "error": "Name is required"}), 400
+
+    if "frame" not in request.files:
+        return jsonify({"success": False, "error": "No frame uploaded"}), 400
+
+    file_bytes = np.frombuffer(request.files["frame"].read(), np.uint8)
+    frame_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    if frame_bgr is None:
+        return jsonify({"success": False, "error": "Failed to decode image"}), 400
+
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    detected_faces = detect_face(frame_rgb, detector_type="retinaface")
+
+    if not detected_faces:
+        return jsonify({"success": False, "error": "No face detected"})
+
+    main_face = max(detected_faces, key=lambda x: x["box"][2] * x["box"][3])
+    x, y, w, h = main_face["box"]
+
+    h_img, w_img = frame_bgr.shape[:2]
+    x = max(0, x); y = max(0, y)
+    w = max(1, min(w, w_img - x))
+    h = max(1, min(h, h_img - y))
+
+    face_img = frame_bgr[y:y+h, x:x+w]
+
+    success = register_new_user(face_img, name)
+
+    if not success:
+        return jsonify({"success": False, "error": "Embedding generation failed"})
+
+    return jsonify({"success": True, "message": f"Registration successful for {name}!"})
+
+
+# ------------------------
+# Health Check
+# ------------------------
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
+
 if __name__ == "__main__":
-    main()
-    
+    print("Running locally at http://127.0.0.1:9000/")
+    app.run(host="0.0.0.0", port=9000, debug=True)

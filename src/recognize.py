@@ -19,9 +19,9 @@ def recognize_face_by_embedding(current_embedding, known_embeddings, known_names
     """
     if not known_embeddings or current_embedding is None:
         return "Unknown", 1.0 # No users registered or failed embedding
-        
+    print("current_embedding:", current_embedding)    
     # Reshape for comparison: (1, 128)
-    current_embedding = current_embedding.reshape(1, -1)
+    current_embedding = np.array(current_embedding).reshape(1, -1)
     
     # Convert list of known embeddings to a NumPy array (N, 128)
     known_embeddings_array = np.array(known_embeddings)
@@ -36,10 +36,9 @@ def recognize_face_by_embedding(current_embedding, known_embeddings, known_names
     # Calculate distance for checking the threshold: Distance = 1 - Similarity
     best_distance = 1.0 - best_similarity
     
-    # Check if the similarity surpasses the threshold (i.e., distance < 0.5)
+    # Check if the distance is below the threshold
     if best_distance < SIMILARITY_THRESHOLD:
         identified_name = known_names[best_match_index]
         return identified_name, best_distance
     else:
-        # System notes the person as unknown [cite: 44]
         return "Unknown", best_distance

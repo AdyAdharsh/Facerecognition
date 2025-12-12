@@ -1,51 +1,36 @@
-import cv2
+import numpy as np
 from deepface import DeepFace
 
-def detect_face(image, detector_type='cnn'):
+def detect_face(img_rgb, detector_type="opencv"):
     """
-    Detects faces in the image using the specified method (MTCNN or Haar Cascade).
-    
-    Args:
-        image (np.array): The input BGR image frame.
-        detector_type (str): 'cnn' for MTCNN (default) or 'classical' for Haar Cascade.
-        
-    Returns:
-        list: A list of dicts/tuples containing detected face info (bounding box, landmarks, confidence).
-              Format: [{'box': (x, y, w, h), 'landmarks': {...}, 'confidence': float}]
+    Detect faces using DeepFace extract_faces() with OpenCV backend.
+    This backend does NOT require downloading any heavy model files,
+    so it works reliably inside Cloud Run.
     """
-    
-    # Map detector type to DeepFace backend name
-    if detector_type == 'cnn':
-        backend = 'mtcnn' # Multi-task Cascaded Convolutional Neural Network [cite: 21]
-    elif detector_type == 'classical':
-        backend = 'opencv' # DeepFace uses 'opencv' for Haar Cascade [cite: 26]
-    else:
+    try:
+        detections = DeepFace.extract_faces(
+            img_path=img_rgb,
+            detector_backend="opencv",
+            enforce_detection=False,
+            align=False
+        )
+    except Exception as e:
+        print("Detection error:", e)
         return []
 
-    results = []
-    
-    try:
-        # DeepFace handles detection, alignment, and returns landmarks (for MTCNN)
-        detected_faces = DeepFace.extract_faces(
-            img_path=image, 
-            detector_backend=backend, 
-            enforce_detection=False # Allow processing even if no face is initially found
-        )
-        
-        for face_info in detected_faces:
-            x, y, w, h = face_info['facial_area'].values()
-            
-            # Note: DeepFace automatically handles alignment and cropping internally for embedding, 
-            # but we return the raw box and a placeholder for structured output
-            results.append({
-                'box': (x, y, w, h),
-                # Landmarks are useful for visualizing the alignment process
-                'landmarks': face_info.get('landmarks', {}), 
-                'confidence': face_info.get('confidence', 1.0)
-            })
+    faces = []
+    for det in detections:
+        area = det.get("facial_area")
+        if not area:
+            continue
 
-    except Exception as e:
-        # print(f"Detection error with {detector_type}: {e}")
-        pass
+        faces.append({
+            "box": [
+                int(area["x"]),
+                int(area["y"]),
+                int(area["w"]),
+                int(area["h"])
+            ]
+        })
 
-    return results
+    return faces

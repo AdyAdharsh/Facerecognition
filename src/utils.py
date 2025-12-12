@@ -1,8 +1,11 @@
 import pickle
 import os
+import numpy as np # Import numpy for type hints if needed
 
 # Define the persistent storage path, navigating two levels up from src/
-EMBEDDINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'embeddings.pkl')
+# Note: os.getcwd() will be the project root when running `python run.py`
+# We adjust the path calculation for a simpler, predictable setup
+EMBEDDINGS_PATH = os.path.join(os.getcwd(), 'data', 'embeddings.pkl')
 
 def load_embeddings():
     """
@@ -20,6 +23,7 @@ def load_embeddings():
             data = pickle.load(f)
             # Ensure the loaded data has the expected structure
             if 'embeddings' not in data or 'names' not in data:
+                 print("Warning: Loaded data structure is incorrect. Returning empty data.")
                  return {'embeddings': [], 'names': []}
             return data
     except Exception as e:
